@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股票策略檢查工具</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { background: white; padding: 30px; border-radius: 12px; margin-bottom: 30px; text-align: center; }
+        .header h1 { color: #333; margin-bottom: 10px; }
+        .input-section { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; }
+        .input-group { display: flex; flex-direction: column; gap: 5px; }
+        .input-group label { font-weight: bold; color: #333; }
+        .input-group input { padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 6px; }
+        .btn-check { padding: 10px 40px; background: #667eea; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .btn-check:hover { background: #764ba2; }
+        .loading { text-align: center; color: white; font-size: 16px; margin: 20px 0; }
+        .error { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 6px; margin-bottom: 20px; }
+        .stock-info { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        .info-box { padding: 15px; background: #f8f9fa; border-radius: 6px; border-left: 3px solid #667eea; }
+        .info-label { font-size: 12px; color: #666; margin-bottom: 5px; }
+        .info-value { font-size: 18px; font-weight: bold; color: #667eea; }
+        .target-price-box { border-left-color: #28a745 !important; }
+        .target-price-value { color: #28a745 !important; }
+        .result-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .strategy-card { background: white; border-radius: 12px; padding: 20px; border-top: 4px solid; }
+        .strategy-card.passed { border-top-color: #28a745; background: #f0f9f5; }
+        .strategy-card.failed { border-top-color: #dc3545; background: #fff5f5; }
+        .strategy-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .strategy-title { font-size: 16px; font-weight: bold; }
+        .strategy-description { font-size: 12px; color: #666; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        .condition { padding: 8px; margin-bottom: 8px; border-radius: 4px; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+        .condition.passed { background: #d4edda; color: #155724; border-left: 3px solid #28a745; }
+        .condition.failed { background: #f8d7da; color: #721c24; border-left: 3px solid #dc3545; }
+        .details-section { background: white; padding: 20px; border-radius: 12px; margin-top: 20px; }
+        .details-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
+        .detail-item { padding: 12px; background: #f8f9fa; border-radius: 6px; border-left: 3px solid #667eea; }
+        .detail-label { font-size: 12px; color: #666; margin-bottom: 5px; }
+        .detail-value { font-size: 16px; font-weight: bold; color: #667eea; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Stock Strategy Checker</h1>
+            <p>Enter stock code and date to check strategies</p>
+        </div>
+
+        <div class="input-section">
+            <div class="input-group">
+                <label>Stock Code</label>
+                <input type="text" id="stockCode" placeholder="e.g: 2330" value="2330">
+            </div>
+            <div class="input-group">
+                <label>Date</label>
+                <input type="date" id="date">
+            </div>
+            <button class="btn-check" onclick="checkStock()">Check</button>
+        </div>
+
+        <div id="loading" class="loading hidden">Loading...</div>
+        <div id="error" class="error hidden"></div>
+
+        <div id="stockInfo" class="stock-info hidden"></div>
+        <div id="resultContainer"></div>
+        <div id="detailsSection" class="details-section hidden">
+            <h3>Details</h3>
+            <div id="detailsGrid" class="details-grid"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('date').valueAsDate = new Date();
+
+        function checkStock() {
+            const stockCode = document.getElementById('stockCode').value.toUpperCase();
+            const date = document.getElementById('date').value;
+
+            if (!stockCode) {
+                showError('Please enter stock code');
+                return;
+            }
+
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('error').classList.add('hidden');
+            document.getElementById('resultContainer').innerHTML = '';
+            document.getElementById('detailsSection').classList.add('hidden');
+            document.getElementById('stockInfo').classList.add('hidden');
+
+            fetch('/api/check-stock', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stockCode, date })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('API Error');
+                return response.json();
+            })
+            .then(data => {
+                document.getElementById('loading').classList.add('hidden');
+                displayStockInfo(data);
+                displayResult(data);
+            })
+            .catch(error => {
+                document.getElementById('loading').classList.add('hidden');
+                showError('Check failed: ' + error.message);
+            });
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = 'Error: ' + message;
+            errorDiv.classList.remove('hidden');
+        }
+
+        function displayStockInfo(data) {
+            const stockInfo = document.getElementById('stockInfo');
+            stockInfo.innerHTML = `
+                <div class="info-box">
+                    <div class="info-label">Code</div>
+                    <div class="info-value">${data.stock_code}</div>
+                </div>
+                <div class="info-box">
+                    <div class="info-label">Close Price</div>
+                    <div class="info-value">NT$${data.close_price}</div>
+                </div>
+                <div class="info-box target-price-box">
+                    <div class="info-label">Target Price</div>
+                    <div class="info-value target-price-value">NT$${data.target_price}</div>
+                </div>
+                <div class="info-box">
+                    <div class="info-label">Growth</div>
+                    <div class="info-value target-price-value">${((data.target_price / data.close_price - 1) * 100).toFixed(1)}%</div>
+                </div>
+            `;
+            stockInfo.classList.remove('hidden');
+        }
+
+        function displayResult(data) {
+            const resultContainer = document.getElementById('resultContainer');
+            resultContainer.innerHTML = '';
+
+            const strategiesData = [
+                { key: 't_strategy', title: 'T Strategy', desc: 'Technical Strategy' },
+                { key: 'foreign_strategy', title: 'Foreign Strategy', desc: 'Foreign Buy Strategy' },
+                { key: 'trust_continuous', title: 'Trust Continuous', desc: 'Trust Continuous Buy' },
+                { key: 'trust_50', title: 'Trust 50', desc: 'Trust Buy > 50' }
+            ];
+
+            strategiesData.forEach(strategy => {
+                const strategyData = data.strategies[strategy.key];
+                const passed = strategyData.passed;
+                const card = document.createElement('div');
+                card.className = `strategy-card ${passed ? 'passed' : 'failed'}`;
+                
+                let conditionsHtml = '';
+                strategyData.conditions.slice(0, 6).forEach(condition => {
+                    conditionsHtml += `
+                        <div class="condition ${condition.passed ? 'passed' : 'failed'}">
+                            <span>${condition.passed ? 'Y' : 'N'}</span>
+                            <span>${condition.name}: ${condition.value}</span>
+                        </div>
+                    `;
+                });
+
+                card.innerHTML = `
+                    <div class="strategy-header">
+                        <span class="strategy-title">${strategy.title}</span>
+                        <span style="font-size: 24px;">${passed ? 'OK' : 'NO'}</span>
+                    </div>
+                    <div class="strategy-description">${strategy.desc}</div>
+                    ${conditionsHtml}
+                `;
+                resultContainer.appendChild(card);
+            });
+
+            displayDetails(data);
+        }
+
+        function displayDetails(data) {
+            const detailsSection = document.getElementById('detailsSection');
+            const detailsGrid = document.getElementById('detailsGrid');
+            detailsGrid.innerHTML = '';
+
+            const details = [
+                { label: 'Date', value: data.date },
+                { label: 'Revenue Growth', value: `${data.revenue_growth}%` },
+                { label: 'Trading Volume', value: `${data.trading_volume}` },
+                { label: '1D Change', value: `${data.price_change_1d}%` },
+                { label: '20D High', value: `NT$${data.price_20d_high}` },
+                { label: 'MA60', value: `NT$${data.ma_60}` },
+                { label: 'MA240', value: `NT$${data.ma_240}` },
+                { label: 'Foreign 5D', value: `${data.foreign_5d_net}` },
+                { label: 'Trust 1D', value: `${data.trust_1d_net}` },
+                { label: 'Trust 3D', value: data.trust_continuous_3d ? 'Yes' : 'No' }
+            ];
+
+            details.forEach(detail => {
+                const item = document.createElement('div');
+                item.className = 'detail-item';
+                item.innerHTML = `
+                    <div class="detail-label">${detail.label}</div>
+                    <div class="detail-value">${detail.value}</div>
+                `;
+                detailsGrid.appendChild(item);
+            });
+
+            detailsSection.classList.remove('hidden');
+        }
+
+        document.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') checkStock();
+        });
+    </script>
+</body>
+</html>
